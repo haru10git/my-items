@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Items</title>
+  <link rel="manifest" href="manifest-edit.webmanifest">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="My Items">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    body {
+      background-color: #FFFFFF;
+      color: #111111;
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .modal-backdrop {
+      background-color: rgba(17, 17, 17, 0.3);
+      backdrop-filter: blur(2px);
+    }
+    @media (hover: hover) {
+      .gear-row .row-actions {
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      .gear-row:hover .row-actions,
+      .gear-row:focus-within .row-actions {
+        opacity: 1;
+      }
+    }
+    .gear-row { -webkit-touch-callout: none; }
+    .gear-row.dragging { background: #FAFAFA; box-shadow: 0 6px 20px rgba(0,0,0,0.14); border-radius: 10px; user-select: none; -webkit-user-select: none; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-[#111111] selection:text-white">
+
+<!-- Minimal Header -->
+<header class="sticky top-0 z-30 bg-white/95 backdrop-blur-sm">
+  <div class="max-w-2xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-end">
+    <div class="flex items-center gap-4">
+      <button type="button" id="openAddModalBtn" class="text-base leading-none text-[#111111]" aria-label="追加">＋</button>
+      <button type="button" id="openShareModalBtn" class="text-[#111111] transition-colors" aria-label="共有" title="共有"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<!-- Main Editorial Column -->
+<main class="flex-1 max-w-2xl w-full mx-auto px-5 sm:px-6 py-10 sm:py-16">
+  <!-- Count & Intro -->
+  <div>
+    <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight"><span id="totalGearCount">0</span> <span id="totalUnitLabel">Items</span></h1>
+  </div>
+  <datalist id="categoryOptions"><option value="Clothing"></option><option value="Electronics"></option><option value="Outdoor"></option><option value="Home"></option><option value="Kitchen"></option><option value="Books"></option><option value="Hobbies"></option><option value="Health"></option><option value="Daily"></option><option value="Other"></option></datalist>
+  <!-- Numbered Category List -->
+  <div id="gearListContainer" class="space-y-9 pt-2 mt-10"></div>
+</main>
+
+<!-- Minimal Footer -->
+<footer class="max-w-2xl w-full mx-auto px-5 sm:px-6 py-6 flex items-center justify-between text-[11px] text-[#AAAAAA]">
+  <span>My Items</span>
+</footer>
+
+<!-- Simple Edit Modal -->
+<div id="editModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-start sm:items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-5 space-y-3">
+    <div class="flex items-center justify-between">
+      <h2 id="editModalTitle" class="text-[15px] font-semibold">アイテムを追加</h2>
+      <button type="button" id="closeEditModalBtn" class="text-[#999999] hover:text-[#111111] text-lg leading-none">×</button>
+    </div>
+    <input type="hidden" id="editId" />
+    <div class="space-y-1">
+      <label class="text-[11px] text-[#666666]">名前 *</label>
+      <input type="text" id="editName" placeholder="例：MacBook Pro 14" class="w-full px-3 py-2 text-[13px] border border-[#E5E5E5] rounded-lg outline-none focus:border-[#111111]" />
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div class="space-y-1">
+        <label class="text-[11px] text-[#666666]">カテゴリー</label>
+        <input type="text" id="editCategory" list="categoryOptions" placeholder="Clothing" class="w-full px-3 py-2 text-[13px] border border-[#E5E5E5] rounded-lg outline-none focus:border-[#111111]" />
+      </div>
+      <div class="space-y-1">
+        <label class="text-[11px] text-[#666666]">数量</label>
+        <input type="number" id="editQty" min="1" value="1" class="w-full px-3 py-2 text-[13px] border border-[#E5E5E5] rounded-lg outline-none focus:border-[#111111]" />
+      </div>
+    </div>
+    <div class="space-y-1">
+      <label class="text-[11px] text-[#666666]">URL</label>
+      <input type="text" id="editUrl" placeholder="https://..." class="w-full px-3 py-2 text-[13px] border border-[#E5E5E5] rounded-lg outline-none focus:border-[#111111]" />
+    </div>
+    <div class="space-y-1">
+      <label class="text-[11px] text-[#666666]">メモ</label>
+      <textarea id="editNote" rows="2" placeholder="メモ" class="w-full px-3 py-2 text-[13px] border border-[#E5E5E5] rounded-lg outline-none focus:border-[#111111] resize-none"></textarea>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" id="deleteItemBtn" class="hidden py-2 px-3 border border-[#FFD6D6] text-[#CC0000] text-[12px] font-medium rounded-lg hover:bg-[#FFF5F5] transition-colors">削除</button>
+      <button type="button" id="saveItemBtn" class="py-2 px-3 bg-[#111111] text-white text-[12px] font-medium rounded-lg hover:bg-[#333333] transition-colors">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share & Publish Modal -->
+<div id="shareModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-start sm:items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-5 space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-[15px] font-semibold">共有・公開</h2>
+      <button type="button" id="closeShareModalBtn" class="text-[#999999] hover:text-[#111111] text-lg leading-none">×</button>
+    </div>
+    <div>
+      <button type="button" id="copyShareUrlBtn" class="w-full py-1.5 px-3 border border-[#E5E5E5] hover:border-[#111111] text-[11px] text-[#111111] rounded-lg transition-colors">共有URL</button>
+    </div>
+  </div>
+</div>
+
+<button type="button" id="backToTopBtn" class="fixed bottom-5 left-5 z-40 text-sm text-[#AAAAAA] hover:text-[#111111] transition-colors" aria-label="トップへ戻る">↑</button>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-16 opacity-0 transition-all duration-300 bg-[#111111] text-white text-[12px] px-4 py-2 rounded-full shadow-lg pointer-events-none"></div>
+
+<script>
+  (function () {
+    const STORAGE_KEY = 'monolog_tokimaru_simple_v1';
+    const PRESET_CATEGORIES = ['Clothing', 'Electronics', 'Outdoor', 'Home', 'Kitchen', 'Books', 'Hobbies', 'Health', 'Daily', 'Other'];
+    let items = [];
+    let isPublicView = false;
+    let isSharedLinkMode = false;
+    let remoteLoadState = { loading: false, error: '' };
+    let searchQuery = '';
+    let selectedCategory = 'all';
+    let viewMode = 'all';
+    let toastTimer = null;
+    const EDITOR_MODE = true;
+    const DEFAULT_GIST_ID = 'fb77613579f119e852be9c09eb190cdc';
+    const GIST_ID_KEY = 'monolog_gist_id';
+    let ownGistId = '';
+    let activeGistId = '';
+    try { ownGistId = localStorage.getItem(GIST_ID_KEY) || ''; } catch (e) {}
+    function resolveGistId() {
+      const hash = window.location.hash || '';
+      let hashGist = '';
+      if (hash.startsWith('#gist=')) hashGist = hash.slice(6).split('&')[0];
+      const params = new URLSearchParams(window.location.search || '');
+      const queryGist = params.get('gist') || '';
+      if (EDITOR_MODE) return ownGistId || hashGist || queryGist || DEFAULT_GIST_ID;
+      return hashGist || queryGist || DEFAULT_GIST_ID;
+    }
+    const GIST_FILE = 'gear.json';
+    const TOKEN_KEY = 'monolog_gist_token';
+    let gistToken = '';
+    let gistOwnerMode = false;
+    let syncTimer = null;
+    try { gistToken = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) {}
+    function getActiveCategories(list) {
+      const seen = new Set();
+      const ordered = [];
+      PRESET_CATEGORIES.forEach(function (c) {
+        if (list.some(function (i) { return i.category === c; })) ordered.push(c);
+      });
+      list.forEach(function (i) {
+        if (i.category && !seen.has(i.category) && !ordered.includes(i.category)) {
+          ordered.push(i.category);
+          seen.add(i.category);
+        }
+      });
+      return ordered;
+    }
+    function encodeShareData(obj) {
+      const json = JSON.stringify(obj);
+      const bytes = new TextEncoder().encode(json);
+      let bin = '';
+      bytes.forEach(function (b) { bin += String.fromCharCode(b); });
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function decodeShareData(str) {
+      const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+      const bin = atob(b64);
+      const bytes = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }
+    function load() {
+      const params = new URLSearchParams(window.location.search || '');
+      const hash = window.location.hash || '';
+      // Check #share= hash
+      try {
+        if (hash.startsWith('#share=')) {
+          const payload = decodeShareData(hash.slice(7));
+          if (payload && Array.isArray(payload.items)) {
+            items = payload.items;
+            isSharedLinkMode = true;
+            isPublicView = true;
+          }
+        }
+      } catch (e) {}
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) items = parsed;
+        }
+      } catch (e) {}
+      if (params.get('view') === 'public') isPublicView = true;
+      gistOwnerMode = !!gistToken;
+      activeGistId = resolveGistId();
+      if (!isSharedLinkMode && !EDITOR_MODE) isPublicView = true;
+    }
+    function save() {
+      if (isSharedLinkMode) return;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
+      scheduleGistPush();
+    }
+    function scheduleGistPush() {
+      if (!gistOwnerMode || !gistToken || isPublicView) return;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(pushToGist, 1200);
+    }
+    async function pushToGist() {
+      try {
+        const res = await fetch('https://api.github.com/gists/' + activeGistId, {
+          method: 'PATCH',
+          headers: { 'Authorization': 'token ' + gistToken, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: { 'gear.json': { content: JSON.stringify(items, null, 2) } } })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+      } catch (e) {
+        showToast('Gist同期に失敗しました');
+      }
+    }
+    async function loadFromGist() {
+      if (isSharedLinkMode || !activeGistId) return;
+      try {
+        const headers = { 'Accept': 'application/vnd.github+json' };
+        if (gistToken) headers['Authorization'] = 'token ' + gistToken;
+        const res = await fetch('https://api.github.com/gists/' + activeGistId, { headers: headers });
+        if (!res.ok) return;
+        const data = await res.json();
+        const file = data && data.files ? data.files[GIST_FILE] : null;
+        if (!file) return;
+        let remote = null;
+        try { remote = JSON.parse(file.content || '[]'); } catch (e) { return; }
+        if (!Array.isArray(remote)) return;
+        if (gistOwnerMode && remote.length === 0 && items.length > 0) { pushToGist(); return; }
+        items = remote;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
+        render();
+      } catch (e) {}
+    }
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function normalizeUrl(raw) {
+      const val = String(raw || '').trim();
+      if (!val) return '';
+      if (/^https?:\/\//i.test(val)) return val;
+      return 'https://' + val;
+    }
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.remove('translate-y-16', 'opacity-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () {
+        toast.classList.add('translate-y-16', 'opacity-0');
+      }, 2000);
+    }
+    function render() {
+      const totalUnits = items.reduce((sum, i) => sum + (Math.max(1, parseInt(i.qty, 10) || 1)), 0);
+      document.getElementById('totalGearCount').textContent = totalUnits;
+      document.getElementById('totalUnitLabel').textContent = totalUnits === 1 ? 'Item' : 'Items';
+      // Public vs Editor UI visibility
+      document.getElementById('openAddModalBtn').classList.toggle('hidden', isSharedLinkMode || isPublicView);
+      document.getElementById('openShareModalBtn').classList.toggle('hidden', isSharedLinkMode || !EDITOR_MODE);
+      const container = document.getElementById('gearListContainer');
+      if (remoteLoadState.loading) {
+        container.innerHTML = '<p class="text-[12px] text-[#999999]">読み込み中...</p>';
+        return;
+      }
+      if (remoteLoadState.error) {
+        container.innerHTML = '<p class="text-[12px] text-[#CC0000]">' + escapeHtml(remoteLoadState.error) + '</p>';
+        return;
+      }
+      if (items.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+      ensureIds();
+      const q = searchQuery.trim().toLowerCase();
+      const filtered = items.filter(function (item) {
+        if (viewMode === 'only' && selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+        if (q && (String(item.name || '') + ' ' + String(item.category || '') + ' ' + String(item.note || '')).toLowerCase().indexOf(q) === -1) return false;
+        return true;
+      });
+      if (filtered.length === 0) {
+        container.innerHTML = '<p class="text-[12px] text-[#999999]">一致するアイテムがありません。</p>';
+        return;
+      }
+      let num = 1;
+      container.innerHTML = getActiveCategories(filtered).map(function (cat) {
+        const catItems = filtered.filter(function (i) { return i.category === cat; });
+        if (catItems.length === 0) return '';
+        const rows = catItems.map(function (item) {
+          const qty = Math.max(1, parseInt(item.qty, 10) || 1);
+          const safeUrl = item.url ? normalizeUrl(item.url) : '';
+          const nameHtml = safeUrl
+            ? '<a href="' + escapeHtml(safeUrl) + '" target="_blank" rel="noopener noreferrer" class="text-[#111111] underline underline-offset-2 decoration-[#CCCCCC] hover:decoration-[#111111]">' + escapeHtml(item.name) + '</a>'
+            : escapeHtml(item.name);
+          const actions = isPublicView ? '' :
+            '<div class="row-actions flex items-center gap-1.5 shrink-0">' +
+            '<button type="button" data-act="edit" data-id="' + escapeHtml(item.id) + '" class="px-2 py-1 text-[11px] text-[#555555] hover:text-[#111111] border border-[#E5E5E5] hover:border-[#111111] rounded-full transition-colors">編集</button>' +
+            '<button type="button" data-act="delete" data-id="' + escapeHtml(item.id) + '" class="px-2 py-1 text-[11px] text-[#999999] hover:text-[#CC0000] border border-[#E5E5E5] hover:border-[#CC0000] rounded-full transition-colors">削除</button>' +
+            '</div>';
+          return '<li data-row-id="' + escapeHtml(item.id) + '" class="gear-row flex items-start justify-between gap-3 py-3">' +
+            '<div class="flex items-start gap-3 min-w-0">' +
+            '<span class="text-[11px] text-[#AAAAAA] tabular-nums pt-0.5">' + String(num++).padStart(2, '0') + '</span>' +
+            '<div class="min-w-0">' +
+            '<span class="text-[13px] text-[#111111]">' + nameHtml + '</span>' +
+            (qty > 1 ? '<span class="ml-1 text-[11px] text-[#999999] tabular-nums">×' + qty + '</span>' : '') +
+            (item.note ? '<p class="text-[11px] text-[#999999] leading-relaxed mt-0.5">' + escapeHtml(item.note) + '</p>' : '') +
+            '</div></div>' + actions + '</li>';
+        }).join('');
+        const catUnits = catItems.reduce(function (s, i) { return s + Math.max(1, parseInt(i.qty, 10) || 1); }, 0);
+        return '<section class="space-y-3">' +
+          '<h2 class="text-base font-semibold tracking-tight flex items-baseline gap-2"><span>' + escapeHtml(cat) + '</span><span class="text-[11px] font-normal text-[#999999] tabular-nums">' + catItems.length + ' Items · ' + catUnits + ' 点</span></h2>' +
+          '<ol class="space-y-0 divide-y divide-[#F0F0F0]">' + rows + '</ol></section>';
+      }).join('');
+    }
+    function ensureIds() {
+      items.forEach(function (i) { if (!i.id) i.id = 'it' + Math.random().toString(36).slice(2, 10); });
+    }
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('コピーしました'); } catch (e) { showToast('コピーに失敗しました'); }
+      document.body.removeChild(ta);
+    }
+    function copyText(text, doneMsg) {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function () { showToast(doneMsg); }).catch(function () { fallbackCopy(text); });
+      } else {
+        fallbackCopy(text);
+      }
+    }
+    function shareUrl() {
+      const base = window.location.href.split('#')[0].split('?')[0].replace(/edit\.html$/, '');
+      if (activeGistId) return base + '#gist=' + activeGistId;
+      const encoded = encodeShareData({ items: items });
+      return base + '#share=' + encoded;
+    }
+    function bindEvents() {
+      function openItemModal(item) {
+        document.getElementById('editId').value = item ? item.id : '';
+        document.getElementById('editName').value = item ? (item.name || '') : '';
+        document.getElementById('editCategory').value = item ? (item.category || '') : '';
+        document.getElementById('editQty').value = item ? (item.qty || 1) : 1;
+        document.getElementById('editUrl').value = item ? (item.url || '') : '';
+        document.getElementById('editNote').value = item ? (item.note || '') : '';
+        document.getElementById('editModalTitle').textContent = item ? 'アイテムを編集' : 'アイテムを追加';
+        document.getElementById('deleteItemBtn').classList.toggle('hidden', !item);
+        document.getElementById('editModal').classList.remove('hidden');
+        document.getElementById('editName').focus();
+      }
+      function closeItemModal() {
+        document.getElementById('editModal').classList.add('hidden');
+      }
+      document.getElementById('openAddModalBtn').addEventListener('click', function () { openItemModal(null); });
+      document.getElementById('closeEditModalBtn').addEventListener('click', closeItemModal);
+      document.getElementById('editModal').addEventListener('click', function (e) { if (e.target.id === 'editModal') closeItemModal(); });
+      document.getElementById('saveItemBtn').addEventListener('click', function () {
+        const name = document.getElementById('editName').value.trim();
+        if (!name) { showToast('名前を入力してください'); return; }
+        const id = document.getElementById('editId').value;
+        const data = {
+          id: id || Date.now().toString(),
+          name: name,
+          category: document.getElementById('editCategory').value.trim() || 'Other',
+          qty: Math.max(1, parseInt(document.getElementById('editQty').value, 10) || 1),
+          url: document.getElementById('editUrl').value.trim(),
+          note: document.getElementById('editNote').value.trim()
+        };
+        if (id) {
+          const idx = items.findIndex(function (i) { return String(i.id) === String(id); });
+          if (idx >= 0) items[idx] = data;
+        } else {
+          items.push(data);
+        }
+        save();
+        closeItemModal();
+        render();
+        showToast('保存しました');
+      });
+      document.getElementById('deleteItemBtn').addEventListener('click', function () {
+        const id = document.getElementById('editId').value;
+        if (!id) return;
+        items = items.filter(function (i) { return String(i.id) !== String(id); });
+        save();
+        closeItemModal();
+        render();
+        showToast('削除しました');
+      });
+      document.getElementById('gearListContainer').addEventListener('click', function (e) {
+        if (suppressClick) { suppressClick = false; return; }
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const id = btn.dataset.id;
+        const item = items.find(function (i) { return String(i.id) === String(id); });
+        if (!item) return;
+        if (btn.dataset.act === 'edit') openItemModal(item);
+        if (btn.dataset.act === 'delete') {
+          items = items.filter(function (i) { return String(i.id) !== String(id); });
+          save();
+          render();
+          showToast('削除しました');
+        }
+      });
+      // Long-press to reorder — no visible controls; activates only on a long press.
+      let suppressClick = false;
+      let lpTimer = null, lpRow = null, lpOl = null, lpDragging = false, lpStartY = 0;
+      function commitReorder(ol) {
+        const ids = Array.from(ol.querySelectorAll('li[data-row-id]')).map(function (li) { return li.dataset.rowId; });
+        if (!ids.length) return;
+        const first = items.find(function (i) { return String(i.id) === String(ids[0]); });
+        if (!first) return;
+        const cat = first.category;
+        const byId = {};
+        items.forEach(function (i) { byId[String(i.id)] = i; });
+        const ordered = ids.map(function (id) { return byId[id]; }).filter(Boolean);
+        let k = 0;
+        items = items.map(function (i) { return i.category === cat ? ordered[k++] : i; });
+      }
+      const gearContainer = document.getElementById('gearListContainer');
+      gearContainer.addEventListener('contextmenu', function (e) {
+        if (e.target.closest('li[data-row-id]')) e.preventDefault();
+      });
+      gearContainer.addEventListener('pointerdown', function (e) {
+        const row = e.target.closest('li[data-row-id]');
+        if (!row || e.target.closest('button')) return;
+        lpRow = row; lpOl = row.closest('ol'); lpStartY = e.clientY; lpDragging = false;
+        lpTimer = setTimeout(function () {
+          lpDragging = true;
+          row.classList.add('dragging');
+          row.style.touchAction = 'none';
+          if (navigator.vibrate) navigator.vibrate(10);
+        }, 450);
+      });
+      gearContainer.addEventListener('pointermove', function (e) {
+        if (lpTimer && !lpDragging && Math.abs(e.clientY - lpStartY) > 10) { clearTimeout(lpTimer); lpTimer = null; }
+        if (!lpDragging || !lpRow || !lpOl) return;
+        e.preventDefault();
+        const siblings = Array.from(lpOl.querySelectorAll('li[data-row-id]'));
+        const after = siblings.find(function (sib) {
+          if (sib === lpRow) return false;
+          const r = sib.getBoundingClientRect();
+          return e.clientY < r.top + r.height / 2;
+        });
+        if (after) { if (after !== lpRow.nextSibling) lpOl.insertBefore(lpRow, after); }
+        else if (lpOl.lastElementChild !== lpRow) lpOl.appendChild(lpRow);
+      });
+      function endLongPress(commit) {
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        if (lpDragging && lpRow) {
+          lpRow.classList.remove('dragging');
+          lpRow.style.touchAction = '';
+          if (commit && lpOl) {
+            commitReorder(lpOl);
+            save();
+            render();
+            suppressClick = true;
+            setTimeout(function () { suppressClick = false; }, 100);
+          } else {
+            render();
+          }
+        }
+        lpDragging = false; lpRow = null; lpOl = null;
+      }
+      gearContainer.addEventListener('touchmove', function (e) { if (lpDragging) e.preventDefault(); }, { passive: false });
+      window.addEventListener('scroll', function () {
+        if (lpTimer && !lpDragging) { clearTimeout(lpTimer); lpTimer = null; lpRow = null; lpOl = null; }
+      }, { passive: true });
+      gearContainer.addEventListener('pointerup', function () { endLongPress(true); });
+      gearContainer.addEventListener('pointercancel', function () { endLongPress(false); });
+      document.getElementById('openShareModalBtn').addEventListener('click', function () {
+        document.getElementById('shareModal').classList.remove('hidden');
+      });
+      document.getElementById('closeShareModalBtn').addEventListener('click', function () {
+        document.getElementById('shareModal').classList.add('hidden');
+      });
+      document.getElementById('shareModal').addEventListener('click', function (e) { if (e.target.id === 'shareModal') document.getElementById('shareModal').classList.add('hidden'); });
+      function onCopyShareUrl() { copyText(shareUrl(), '共有URLをコピーしました'); }
+      document.getElementById('copyShareUrlBtn').addEventListener('click', onCopyShareUrl);
+      document.getElementById('backToTopBtn').addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    }
+    load();
+    bindEvents();
+    render();
+    loadFromGist();
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+  })();
+</script>
+</body>
+</html>
