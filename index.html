@@ -49,7 +49,6 @@
     <div class="flex items-center gap-4">
       <button type="button" id="syncBtn" class="hidden text-[11px] text-[#666666] hover:text-[#111111] transition-colors">ログイン</button>
       <button type="button" id="openAddModalBtn" class="text-base leading-none text-[#111111]" aria-label="追加">＋</button>
-      <button type="button" id="openShareModalBtn" class="text-[#111111] transition-colors" aria-label="共有" title="共有"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></button>
     </div>
   </div>
 </header>
@@ -104,19 +103,6 @@
     <div class="grid grid-cols-2 gap-2">
       <button type="button" id="deleteItemBtn" class="hidden py-2 px-3 border border-[#FFD6D6] text-[#CC0000] text-[12px] font-medium rounded-lg hover:bg-[#FFF5F5] transition-colors">削除</button>
       <button type="button" id="saveItemBtn" class="py-2 px-3 bg-[#111111] text-white text-[12px] font-medium rounded-lg hover:bg-[#333333] transition-colors">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- Share & Publish Modal -->
-<div id="shareModal" class="hidden fixed inset-0 z-50 modal-backdrop flex items-start sm:items-center justify-center p-4">
-  <div class="bg-white w-full max-w-md rounded-2xl shadow-lg p-5 space-y-4">
-    <div class="flex items-center justify-between">
-      <h2 class="text-[15px] font-semibold">共有・公開</h2>
-      <button type="button" id="closeShareModalBtn" class="text-[#999999] hover:text-[#111111] text-lg leading-none">×</button>
-    </div>
-    <div>
-      <button type="button" id="copyShareUrlBtn" class="w-full py-1.5 px-3 border border-[#E5E5E5] hover:border-[#111111] text-[11px] text-[#111111] rounded-lg transition-colors">共有URL</button>
     </div>
   </div>
 </div>
@@ -329,6 +315,7 @@
           mods[1].onAuthStateChanged(FB.auth, function (user) {
             FB.user = user;
             updateSyncUi();
+            render();
             if (user) fbSubscribe();
             else if (FB.unsub) { FB.unsub(); FB.unsub = null; }
           });
@@ -363,11 +350,25 @@
       document.getElementById('totalUnitLabel').textContent = totalUnits === 1 ? 'Item' : 'Items';
       // Public vs Editor UI visibility
       document.getElementById('openAddModalBtn').classList.toggle('hidden', isSharedLinkMode || isPublicView);
-      document.getElementById('openShareModalBtn').classList.toggle('hidden', isSharedLinkMode || !EDITOR_MODE);
       if (!EDITOR_MODE) {
         ['siteHeader', 'heroCount', 'footerBrand'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
       }
       const container = document.getElementById('gearListContainer');
+      if (EDITOR_MODE) {
+        const unlocked = !!(FB.user && FB.user.email === OWNER_EMAIL);
+        const hero = document.getElementById('heroCount');
+        if (!unlocked) {
+          if (hero) hero.style.display = 'none';
+          document.getElementById('openAddModalBtn').classList.add('hidden');
+          container.innerHTML = FB.user
+            ? '<p class="text-[12px] text-[#999999] pt-6">このアカウントでは編集できません</p>'
+            : '<div class="pt-6"><button type="button" id="gateLoginBtn" class="py-2 px-5 border border-[#111111] text-[12px] text-[#111111] rounded-full">ログイン</button></div>';
+          const gb = document.getElementById('gateLoginBtn');
+          if (gb) gb.addEventListener('click', fbSignIn);
+          return;
+        }
+        if (hero) hero.style.display = '';
+      }
       if (remoteLoadState.loading) {
         container.innerHTML = '<p class="text-[12px] text-[#999999]">読み込み中...</p>';
         return;
@@ -440,10 +441,6 @@
       } else {
         fallbackCopy(text);
       }
-    }
-    function shareUrl() {
-      const base = window.location.href.split('#')[0].split('?')[0].replace(/edit\.html$/, '');
-      return base;
     }
     function bindEvents() {
       function openItemModal(item) {
@@ -577,15 +574,6 @@
       }, { passive: true });
       gearContainer.addEventListener('pointerup', function () { endLongPress(true); });
       gearContainer.addEventListener('pointercancel', function () { endLongPress(false); });
-      document.getElementById('openShareModalBtn').addEventListener('click', function () {
-        document.getElementById('shareModal').classList.remove('hidden');
-      });
-      document.getElementById('closeShareModalBtn').addEventListener('click', function () {
-        document.getElementById('shareModal').classList.add('hidden');
-      });
-      document.getElementById('shareModal').addEventListener('click', function (e) { if (e.target.id === 'shareModal') document.getElementById('shareModal').classList.add('hidden'); });
-      function onCopyShareUrl() { copyText(shareUrl(), '共有URLをコピーしました'); }
-      document.getElementById('copyShareUrlBtn').addEventListener('click', onCopyShareUrl);
       document.getElementById('backToTopBtn').addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
       document.getElementById('syncBtn').addEventListener('click', function () {
         if (FB.user) fbSignOut(); else fbSignIn();
