@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="My Items">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" type="image/png" href="icon-192.png">
-  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="stylesheet" href="styles.css">
   <style>
     body {
       background-color: #FFFFFF;
@@ -47,6 +47,8 @@
 <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-sm">
   <div class="max-w-2xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-end">
     <div class="flex items-center gap-4">
+      <span id="syncStatus" class="text-[10px] text-[#999999]"></span>
+      <button type="button" id="syncBtn" class="hidden text-[11px] text-[#666666] hover:text-[#111111] transition-colors">ログイン</button>
       <button type="button" id="openAddModalBtn" class="text-base leading-none text-[#111111]" aria-label="追加">＋</button>
       <button type="button" id="openShareModalBtn" class="text-[#111111] transition-colors" aria-label="共有" title="共有"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></button>
     </div>
@@ -67,6 +69,7 @@
 <!-- Minimal Footer -->
 <footer class="max-w-2xl w-full mx-auto px-5 sm:px-6 py-6 flex items-center justify-between text-[11px] text-[#AAAAAA]">
   <span>My Items</span>
+  <button type="button" id="backToTopBtn" class="text-[#AAAAAA] hover:text-[#111111] transition-colors" aria-label="トップへ戻る">↑</button>
 </footer>
 
 <!-- Simple Edit Modal -->
@@ -119,8 +122,6 @@
   </div>
 </div>
 
-<button type="button" id="backToTopBtn" class="fixed bottom-5 left-5 z-40 text-sm text-[#AAAAAA] hover:text-[#111111] transition-colors" aria-label="トップへ戻る">↑</button>
-
 <!-- Toast -->
 <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-16 opacity-0 transition-all duration-300 bg-[#111111] text-white text-[12px] px-4 py-2 rounded-full shadow-lg pointer-events-none"></div>
 
@@ -138,28 +139,17 @@
     let viewMode = 'all';
     let toastTimer = null;
     const EDITOR_MODE = false;
-    const DEFAULT_GIST_ID = 'fb77613579f119e852be9c09eb190cdc';
-    const GIST_ID_KEY = 'monolog_gist_id';
-    let ownGistId = '';
-    let activeGistId = '';
-    let explicitGistId = '';
-    try { ownGistId = localStorage.getItem(GIST_ID_KEY) || ''; } catch (e) {}
-    function resolveGistId() {
-      const hash = window.location.hash || '';
-      let hashGist = '';
-      if (hash.startsWith('#gist=')) hashGist = hash.slice(6).split('&')[0];
-      const params = new URLSearchParams(window.location.search || '');
-      const queryGist = params.get('gist') || '';
-      explicitGistId = hashGist || queryGist || '';
-      if (EDITOR_MODE) return ownGistId || hashGist || queryGist || DEFAULT_GIST_ID;
-      return hashGist || queryGist || DEFAULT_GIST_ID;
-    }
-    const GIST_FILE = 'gear.json';
-    const TOKEN_KEY = 'monolog_gist_token';
-    let gistToken = '';
-    let gistOwnerMode = false;
-    let syncTimer = null;
-    try { gistToken = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) {}
+    const FIREBASE_CONFIG = {
+      apiKey: 'AIzaSyCAYtu9Kb1pJyURtTx3l3r6KkhaCHkBBuQ',
+      authDomain: 'my-items-c3b0c.firebaseapp.com',
+      projectId: 'my-items-c3b0c',
+      appId: '1:588566035848:web:4806cdea1b524de82dce3d'
+    };
+    const OWNER_EMAIL = 'hyama0903@gmail.com';
+    const FB = { authMod: null, fsMod: null, auth: null, db: null, user: null, ready: false, unsub: null, migrated: false };
+    const MIGRATED_KEY = 'monolog_fb_migrated_v1';
+    try { FB.migrated = localStorage.getItem(MIGRATED_KEY) === '1'; } catch (e) {}
+    let fbPushTimer = null;
     function getActiveCategories(list) {
       const seen = new Set();
       const ordered = [];
@@ -215,54 +205,147 @@
         } catch (e) {}
       }
       if (params.get('view') === 'public') isPublicView = true;
-      gistOwnerMode = !!gistToken;
-      activeGistId = resolveGistId();
       if (!isSharedLinkMode && !EDITOR_MODE) isPublicView = true;
     }
     function save() {
       if (isSharedLinkMode) return;
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
       try { localStorage.setItem(BACKUP_KEY, JSON.stringify(items)); } catch (e) {}
-      scheduleGistPush();
+      scheduleFbPush();
     }
-    function scheduleGistPush() {
-      if (!gistOwnerMode || !gistToken || isPublicView) return;
-      if (syncTimer) clearTimeout(syncTimer);
-      syncTimer = setTimeout(pushToGist, 1200);
+    function scheduleFbPush() {
+      if (!EDITOR_MODE || isPublicView || isSharedLinkMode) return;
+      if (!FB.user || FB.user.email !== OWNER_EMAIL) return;
+      if (fbPushTimer) clearTimeout(fbPushTimer);
+      fbPushTimer = setTimeout(function () { fbPush(); }, 1200);
     }
-    async function pushToGist() {
+    async function fbPush() {
+      if (!FB.ready || !FB.user || FB.user.email !== OWNER_EMAIL) return;
       try {
-        const res = await fetch('https://api.github.com/gists/' + activeGistId, {
-          method: 'PATCH',
-          headers: { 'Authorization': 'token ' + gistToken, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: { 'gear.json': { content: JSON.stringify(items, null, 2) } } })
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const ref = FB.fsMod.doc(FB.db, 'lists', 'main');
+        await FB.fsMod.setDoc(ref, { items: items, updatedAt: FB.fsMod.serverTimestamp() });
       } catch (e) {
-        showToast('Gist同期に失敗しました');
+        showToast('同期に失敗しました');
       }
     }
-    async function loadFromGist() {
-      if (isSharedLinkMode || !activeGistId) return;
-      if (EDITOR_MODE && !gistToken && !ownGistId && !explicitGistId) return;
+    function applyRemote(remote) {
+      if (JSON.stringify(remote) === JSON.stringify(items)) return;
+      items = remote;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
+      if (items.length > 0) { try { localStorage.setItem(BACKUP_KEY, JSON.stringify(items)); } catch (e) {} }
+      render();
+    }
+    function fbMarkMigrated() {
+      FB.migrated = true;
+      try { localStorage.setItem(MIGRATED_KEY, '1'); } catch (e) {}
+    }
+    function fbSubscribe() {
+      if (FB.unsub) { FB.unsub(); FB.unsub = null; }
+      const ref = FB.fsMod.doc(FB.db, 'lists', 'main');
+      FB.unsub = FB.fsMod.onSnapshot(ref, function (snap) {
+        if (!FB.user) return;
+        if (snap.metadata.hasPendingWrites) return;
+        if (!snap.exists()) {
+          // No cloud copy yet: this device's local list becomes the master.
+          fbMarkMigrated();
+          if (items.length > 0) fbPush();
+          return;
+        }
+        const data = snap.data();
+        const remote = (data && Array.isArray(data.items)) ? data.items : [];
+        if (!FB.migrated) {
+          // First sign-in on this device with an existing cloud copy.
+          fbMarkMigrated();
+          if (items.length > remote.length) {
+            // Local holds more (e.g. the PC's pre-migration list): merge by id
+            // instead of overwriting, so nothing is lost.
+            const seen = {};
+            remote.forEach(function (i) { seen[String(i.id)] = true; });
+            const merged = remote.slice();
+            items.forEach(function (i) { if (!seen[String(i.id)]) merged.push(i); });
+            items = merged;
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
+            try { localStorage.setItem(BACKUP_KEY, JSON.stringify(items)); } catch (e) {}
+            render();
+            fbPush();
+          } else {
+            applyRemote(remote);
+          }
+          return;
+        }
+        applyRemote(remote);
+      }, function (err) {
+        showToast('同期の読み込みに失敗しました');
+      });
+    }
+    function fbSubscribePublic() {
+      const ref = FB.fsMod.doc(FB.db, 'lists', 'main');
+      FB.unsub = FB.fsMod.onSnapshot(ref, function (snap) {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (!data || !Array.isArray(data.items)) return;
+        applyRemote(data.items);
+      }, function (err) {});
+    }
+    async function fbSignIn() {
+      if (!FB.ready) { showToast('接続中です。少し待ってからもう一度押してください'); return; }
       try {
-        const headers = { 'Accept': 'application/vnd.github+json' };
-        if (gistToken) headers['Authorization'] = 'token ' + gistToken;
-        const res = await fetch('https://api.github.com/gists/' + activeGistId, { headers: headers });
-        if (!res.ok) return;
-        const data = await res.json();
-        const file = data && data.files ? data.files[GIST_FILE] : null;
-        if (!file) return;
-        let remote = null;
-        try { remote = JSON.parse(file.content || '[]'); } catch (e) { return; }
-        if (!Array.isArray(remote)) return;
-        if (remote.length === 0) { if (gistOwnerMode && items.length > 0) pushToGist(); return; }
-        if (EDITOR_MODE && items.length > 0) { if (gistOwnerMode) pushToGist(); return; }
-        items = remote;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
-        if (items.length > 0) { try { localStorage.setItem(BACKUP_KEY, JSON.stringify(items)); } catch (e) {} }
-        render();
-      } catch (e) {}
+        const provider = new FB.authMod.GoogleAuthProvider();
+        await FB.authMod.signInWithPopup(FB.auth, provider);
+      } catch (e) {
+        try {
+          const provider2 = new FB.authMod.GoogleAuthProvider();
+          await FB.authMod.signInWithRedirect(FB.auth, provider2);
+        } catch (e2) {
+          showToast('ログインに失敗しました');
+        }
+      }
+    }
+    async function fbSignOut() {
+      try { await FB.authMod.signOut(FB.auth); showToast('ログアウトしました'); } catch (e) {}
+    }
+    function updateSyncUi() {
+      const btn = document.getElementById('syncBtn');
+      const st = document.getElementById('syncStatus');
+      if (!btn) return;
+      if (!EDITOR_MODE) { btn.classList.add('hidden'); if (st) st.textContent = ''; return; }
+      btn.classList.remove('hidden');
+      if (FB.user) {
+        btn.textContent = 'ログアウト';
+        if (st) st.textContent = (FB.user.email === OWNER_EMAIL) ? '同期ON' : '別アカウント';
+      } else {
+        btn.textContent = 'ログイン';
+        if (st) st.textContent = '';
+      }
+    }
+    async function fbInit() {
+      updateSyncUi();
+      try {
+        const base = 'https://www.gstatic.com/firebasejs/10.12.2/';
+        const mods = await Promise.all([
+          import(base + 'firebase-app.js'),
+          import(base + 'firebase-auth.js'),
+          import(base + 'firebase-firestore.js')
+        ]);
+        const app = mods[0].initializeApp(FIREBASE_CONFIG);
+        FB.authMod = mods[1];
+        FB.fsMod = mods[2];
+        FB.auth = mods[1].getAuth(app);
+        FB.db = mods[2].getFirestore(app);
+        FB.ready = true;
+        if (EDITOR_MODE) {
+          mods[1].onAuthStateChanged(FB.auth, function (user) {
+            FB.user = user;
+            updateSyncUi();
+            if (user) fbSubscribe();
+            else if (FB.unsub) { FB.unsub(); FB.unsub = null; }
+          });
+        } else if (!isSharedLinkMode) {
+          fbSubscribePublic();
+        }
+      } catch (e) {
+        // SDK unreachable (offline etc.): keep working from the local copy.
+      }
     }
     function escapeHtml(str) {
       return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -365,10 +448,7 @@
     }
     function shareUrl() {
       const base = window.location.href.split('#')[0].split('?')[0].replace(/edit\.html$/, '');
-      const gid = (EDITOR_MODE && !gistToken && !ownGistId && !explicitGistId) ? '' : activeGistId;
-      if (gid) return base + '#gist=' + gid;
-      const encoded = encodeShareData({ items: items });
-      return base + '#share=' + encoded;
+      return base;
     }
     function bindEvents() {
       function openItemModal(item) {
@@ -512,61 +592,19 @@
       function onCopyShareUrl() { copyText(shareUrl(), '共有URLをコピーしました'); }
       document.getElementById('copyShareUrlBtn').addEventListener('click', onCopyShareUrl);
       document.getElementById('backToTopBtn').addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+      document.getElementById('syncBtn').addEventListener('click', function () {
+        if (FB.user) fbSignOut(); else fbSignIn();
+      });
     }
     load();
     bindEvents();
     render();
+    const fbReady = fbInit();
     if (EDITOR_MODE && (window.location.hash || '') === '#setup') {
       try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {}
-      const panel = document.createElement('div');
-      panel.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
-      panel.innerHTML = '<div style="background:#fff;color:#111;border-radius:12px;padding:20px;width:100%;max-width:420px;">'
-        + '<div style="font-weight:700;margin-bottom:8px;">同期の有効化</div>'
-        + '<div style="font-size:13px;margin-bottom:10px;">GitHubのトークン（classic、gist権限）を貼り付けてください。</div>'
-        + '<input id="setupTokenInput" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ghp_..." style="width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:8px;padding:10px;font-size:14px;">'
-        + '<div id="setupStatus" style="font-size:13px;margin-top:10px;min-height:18px;"></div>'
-        + '<div style="display:flex;gap:8px;margin-top:12px;">'
-        + '<button id="setupSaveBtn" style="flex:1;background:#111;color:#fff;border:0;border-radius:8px;padding:10px;font-size:14px;">保存して有効化</button>'
-        + '<button id="setupCancelBtn" style="flex:1;background:#eee;color:#111;border:0;border-radius:8px;padding:10px;font-size:14px;">キャンセル</button>'
-        + '</div></div>';
-      document.body.appendChild(panel);
-      const statusEl = panel.querySelector('#setupStatus');
-      panel.querySelector('#setupCancelBtn').addEventListener('click', function () { panel.remove(); });
-      panel.querySelector('#setupSaveBtn').addEventListener('click', async function () {
-        const t = (panel.querySelector('#setupTokenInput').value || '').replace(/\s+/g, '');
-        if (!t) { statusEl.textContent = 'トークンが入力されていません。'; return; }
-        statusEl.textContent = '確認中…';
-        try {
-          const r = await fetch('https://api.github.com/user', { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/vnd.github+json' } });
-          if (!r.ok) throw new Error('invalid');
-        } catch (e) {
-          statusEl.textContent = 'トークンが無効です。コピーし直すか、classicトークン（gistにチェック）で作り直してください。';
-          return;
-        }
-        gistToken = t;
-        ownGistId = DEFAULT_GIST_ID;
-        gistOwnerMode = true;
-        try {
-          localStorage.setItem(TOKEN_KEY, t);
-          localStorage.setItem(GIST_ID_KEY, ownGistId);
-        } catch (e) {}
-        activeGistId = resolveGistId();
-        try {
-          const res = await fetch('https://api.github.com/gists/' + activeGistId, {
-            method: 'PATCH',
-            headers: { 'Authorization': 'token ' + t, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ files: { 'gear.json': { content: JSON.stringify(items, null, 2) } } })
-          });
-          if (!res.ok) throw new Error('push ' + res.status);
-        } catch (e) {
-          statusEl.textContent = 'トークンは有効ですが、Gistに書き込めませんでした。classicトークンで gist にチェックが入っているか確認してください。';
-          return;
-        }
-        statusEl.textContent = '同期を有効化しました。この端末の内容を送信しました。';
-        setTimeout(function () { panel.remove(); }, 1500);
-      });
+      fbReady.then(function () { if (!FB.user) fbSignIn(); });
     }
-    loadFromGist();
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
         navigator.serviceWorker.register('sw.js').catch(function () {});

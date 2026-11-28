@@ -1,5 +1,5 @@
-const CACHE = 'my-items-v5';
-const SHELL = ['./', './index.html', './edit.html', './manifest.webmanifest', './manifest-edit.webmanifest', './icon-192.png', './icon-512.png', './icon.svg'];
+const CACHE = 'my-items-v7';
+const SHELL = ['./', './index.html', './edit.html', './styles.css', './manifest.webmanifest', './manifest-edit.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './icon.svg'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
@@ -13,7 +13,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.hostname === 'api.github.com') return; // list data is always fetched live
+  if (url.hostname.endsWith('googleapis.com') || url.hostname === 'www.gstatic.com' || url.hostname.endsWith('firebaseapp.com')) return; // sync/auth traffic is always live
   e.respondWith(
     caches.match(e.request).then((cached) => {
       const network = fetch(e.request)
