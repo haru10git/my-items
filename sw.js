@@ -1,4 +1,4 @@
-const CACHE = 'my-items-v7';
+const CACHE = 'my-items-v8';
 const SHELL = ['./', './index.html', './edit.html', './styles.css', './manifest.webmanifest', './manifest-edit.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './icon.svg'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

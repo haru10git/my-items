@@ -44,10 +44,9 @@
 <body class="min-h-screen flex flex-col selection:bg-[#111111] selection:text-white">
 
 <!-- Minimal Header -->
-<header class="sticky top-0 z-30 bg-white/95 backdrop-blur-sm">
+<header id="siteHeader" class="sticky top-0 z-30 bg-white/95 backdrop-blur-sm">
   <div class="max-w-2xl mx-auto px-5 sm:px-6 h-14 flex items-center justify-end">
     <div class="flex items-center gap-4">
-      <span id="syncStatus" class="text-[10px] text-[#999999]"></span>
       <button type="button" id="syncBtn" class="hidden text-[11px] text-[#666666] hover:text-[#111111] transition-colors">ログイン</button>
       <button type="button" id="openAddModalBtn" class="text-base leading-none text-[#111111]" aria-label="追加">＋</button>
       <button type="button" id="openShareModalBtn" class="text-[#111111] transition-colors" aria-label="共有" title="共有"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></button>
@@ -58,7 +57,7 @@
 <!-- Main Editorial Column -->
 <main class="flex-1 max-w-2xl w-full mx-auto px-5 sm:px-6 py-10 sm:py-16">
   <!-- Count & Intro -->
-  <div>
+  <div id="heroCount">
     <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight"><span id="totalGearCount">0</span> <span id="totalUnitLabel">Items</span></h1>
   </div>
   <datalist id="categoryOptions"><option value="Clothing"></option><option value="Electronics"></option><option value="Outdoor"></option><option value="Home"></option><option value="Kitchen"></option><option value="Books"></option><option value="Hobbies"></option><option value="Health"></option><option value="Daily"></option><option value="Other"></option></datalist>
@@ -68,7 +67,7 @@
 
 <!-- Minimal Footer -->
 <footer class="max-w-2xl w-full mx-auto px-5 sm:px-6 py-6 flex items-center justify-between text-[11px] text-[#AAAAAA]">
-  <span>My Items</span>
+  <span id="footerBrand">My Items</span>
   <button type="button" id="backToTopBtn" class="text-[#AAAAAA] hover:text-[#111111] transition-colors" aria-label="トップへ戻る">↑</button>
 </footer>
 
@@ -306,17 +305,10 @@
     }
     function updateSyncUi() {
       const btn = document.getElementById('syncBtn');
-      const st = document.getElementById('syncStatus');
       if (!btn) return;
-      if (!EDITOR_MODE) { btn.classList.add('hidden'); if (st) st.textContent = ''; return; }
+      if (!EDITOR_MODE) { btn.classList.add('hidden'); return; }
       btn.classList.remove('hidden');
-      if (FB.user) {
-        btn.textContent = 'ログアウト';
-        if (st) st.textContent = (FB.user.email === OWNER_EMAIL) ? '同期ON' : '別アカウント';
-      } else {
-        btn.textContent = 'ログイン';
-        if (st) st.textContent = '';
-      }
+      btn.textContent = FB.user ? 'ログアウト' : 'ログイン';
     }
     async function fbInit() {
       updateSyncUi();
@@ -372,6 +364,9 @@
       // Public vs Editor UI visibility
       document.getElementById('openAddModalBtn').classList.toggle('hidden', isSharedLinkMode || isPublicView);
       document.getElementById('openShareModalBtn').classList.toggle('hidden', isSharedLinkMode || !EDITOR_MODE);
+      if (!EDITOR_MODE) {
+        ['siteHeader', 'heroCount', 'footerBrand'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+      }
       const container = document.getElementById('gearListContainer');
       if (remoteLoadState.loading) {
         container.innerHTML = '<p class="text-[12px] text-[#999999]">読み込み中...</p>';
@@ -422,7 +417,7 @@
         }).join('');
         const catUnits = catItems.reduce(function (s, i) { return s + Math.max(1, parseInt(i.qty, 10) || 1); }, 0);
         return '<section class="space-y-3">' +
-          '<h2 class="text-base font-semibold tracking-tight flex items-baseline gap-2"><span>' + escapeHtml(cat) + '</span><span class="text-[11px] font-normal text-[#999999] tabular-nums">' + catItems.length + ' Items · ' + catUnits + ' 点</span></h2>' +
+          '<h2 class="text-base font-semibold tracking-tight flex items-baseline gap-2"><span>' + escapeHtml(cat) + '</span>' + (EDITOR_MODE ? '<span class="text-[11px] font-normal text-[#999999] tabular-nums">' + catItems.length + ' Items · ' + catUnits + ' 点</span>' : '') + '</h2>' +
           '<ol class="space-y-0 divide-y divide-[#F0F0F0]">' + rows + '</ol></section>';
       }).join('');
     }
